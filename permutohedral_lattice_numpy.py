@@ -27,8 +27,10 @@ class HashTablePermutohedral(object):
         self.capacity = 2 ** 15
         self.filled = 0
         self.entries = [{'key_idx': -1, 'value_idx': -1} for _ in range(self.capacity)]
-        self.keys = np.zeros((kd_ * self.capacity // 2), dtype='int16')
-        self.values = np.zeros((vd_ * self.capacity // 2), dtype='float32')
+        # self.keys = np.zeros((kd_ * self.capacity // 2), dtype='int16')
+        # self.values = np.zeros((vd_ * self.capacity // 2), dtype='float32')
+        self.keys = np.zeros((self.capacity // 2, kd_), dtype='int16')
+        self.values = np.zeros((self.capacity // 2, vd_), dtype='float32')
 
     def size(self):
         return self.filled
