@@ -58,21 +58,25 @@ class HashTablePermutohedral(object):
                 # for i in range(self.kd):
                 #     self.keys[self.filled * self.kd + i] = key[i]
                 # ->> 2021.08.26 Numpify
-                self.keys[self.filled * self.kd:self.filled * self.kd + self.kd] = key[:self.kd]
+                # self.keys[self.filled * self.kd:self.filled * self.kd + self.kd] = key[:self.kd]
+                self.keys[self.filled, :self.kd] = key[:self.kd]
                 
-                e['key_idx'] = self.filled * self.kd
-                e['value_idx'] = self.filled * self.vd
+                # e['key_idx'] = self.filled * self.kd
+                # e['value_idx'] = self.filled * self.vd
+                e['key_idx'] = self.filled
+                e['value_idx'] = self.filled
                 self.entries[h] = e
                 self.filled += 1
                 return e['value_idx']
 
-            # check if the cell has a matching key
-            match = self.keys[e['key_idx']] == key[0]
-            i = 1
-            while i < self.kd and match:
-                match = self.keys[e['key_idx'] + i] == key[i]
-                i += 1
+            # # check if the cell has a matching key
+            # match = self.keys[e['key_idx']] == key[0]
+            # i = 1
+            # while i < self.kd and match:
+            #     match = self.keys[e['key_idx'] + i] == key[i]
+            #     i += 1
 
+            match = np.all(self.keys[e['key_idx']] == key[:self.kd])
             if match:
                 return e['value_idx']
             # increment the bucket with warparound
@@ -116,13 +120,17 @@ class HashTablePermutohedral(object):
         old_capacity = self.capacity
         self.capacity *= 2
         # Migrate the value vectors.
-        new_values = np.zeros((self.vd * self.capacity // 2), dtype='float32')
-        new_values[:self.vd * old_capacity // 2] = self.values
+        # new_values = np.zeros((self.vd * self.capacity // 2), dtype='float32')
+        # new_values[:self.vd * old_capacity // 2] = self.values
+        new_values = np.zeros((self.capacity // 2, self.vd), dtype='float32')
+        new_values[:old_capacity // 2] = self.values
         self.values = new_values
 
         # Migrate the key vectors.
-        new_keys = np.zeros((self.kd * self.capacity // 2), dtype='int16')
-        new_keys[:self.kd * old_capacity // 2] = self.keys
+        # new_keys = np.zeros((self.kd * self.capacity // 2), dtype='int16')
+        # new_keys[:self.kd * old_capacity // 2] = self.keys
+        new_keys = np.zeros((self.capacity // 2, self.kd), dtype='int16')
+        new_keys[:old_capacity // 2] = self.keys
         self.keys = new_keys
 
         # Migrate the table of indices.
@@ -130,8 +138,11 @@ class HashTablePermutohedral(object):
         for i in range(old_capacity):
             if self.entries[i]['key_idx'] == -1:
                 continue
+            # h = self._hash(
+            #     self.keys[self.entries[i]['key_idx']:self.entries[i]['key_idx'] + self.kd]
+            # ) % self.capacity
             h = self._hash(
-                self.keys[self.entries[i]['key_idx']:self.entries[i]['key_idx'] + self.kd]
+                self.keys[self.entries[i]['key_idx']]
             ) % self.capacity
             while new_entries[h]['key_idx'] != -1:
                 h += 1
