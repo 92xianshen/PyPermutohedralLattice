@@ -9,6 +9,24 @@ log = logging.getLogger(__name__)
 
 __all__ = ['PermutohedralLattice']
 
+# ->> 2021.08.31 1D HashTable converted to that of 2D
+# ->> Entry list stores offsets but indice list stores indices
+# ->> Lookup
+#       h <- hash(key)
+#       idx <- indices[h]
+#       key <- keys[idx]
+#       value <- values[idx]
+# ->> Create
+#       h <- hash(key)
+#       keys[filled] <- key
+#       values[filled] <- value
+#       indices[h] <- filled
+#       filled <- filled + 1
+# ->> Resize
+#       new_keys <- keys
+#       new_values <- values
+#       for each idx:
+#           h <- hash(key)
 class HashTablePermutohedral(object):
     def __init__(self, kd_, vd_):
         """
@@ -25,12 +43,13 @@ class HashTablePermutohedral(object):
         self.vd = vd_
 
         self.capacity = 2 ** 15
+        # Count
         self.filled = 0
-        self.entries = [{'key_idx': -1, 'value_idx': -1} for _ in range(self.capacity)]
-        # self.keys = np.zeros((kd_ * self.capacity // 2), dtype='int16')
-        # self.values = np.zeros((vd_ * self.capacity // 2), dtype='float32')
+        # Storages of keys and values
         self.keys = np.zeros((self.capacity // 2, kd_), dtype='int16')
         self.values = np.zeros((self.capacity // 2, vd_), dtype='float32')
+        # Indices of keys and values
+        self.indices = np.ones((self.capacity, ), dtype='int64') * -1
 
     def size(self):
         return self.filled
@@ -41,44 +60,29 @@ class HashTablePermutohedral(object):
     def get_values(self):
         return self.values
 
-    def lookup_offset(self, key, h, create=True):
+    def lookup_idx(self, key, h, create=True):
         # Double has table size if necessary
         if self.filled >= (self.capacity // 2) - 1:
             self._grow()
 
         # Find the entry with the given key
         while True:
-            e = self.entries[h]
-            if e['key_idx'] == -1:
+            idx = self.indices[h]
+            if idx == -1:
                 if not create:
                     # return not found
                     return -1
                 
-                # need to create an entry. Store the given key
-                # for i in range(self.kd):
-                #     self.keys[self.filled * self.kd + i] = key[i]
-                # ->> 2021.08.26 Numpify
-                # self.keys[self.filled * self.kd:self.filled * self.kd + self.kd] = key[:self.kd]
+                # Need to create a key
                 self.keys[self.filled, :self.kd] = key[:self.kd]
-                
-                # e['key_idx'] = self.filled * self.kd
-                # e['value_idx'] = self.filled * self.vd
-                e['key_idx'] = self.filled
-                e['value_idx'] = self.filled
-                self.entries[h] = e
+                self.indices[h] = self.filled
                 self.filled += 1
-                return e['value_idx']
+                return self.indices[h]
 
-            # # check if the cell has a matching key
-            # match = self.keys[e['key_idx']] == key[0]
-            # i = 1
-            # while i < self.kd and match:
-            #     match = self.keys[e['key_idx'] + i] == key[i]
-            #     i += 1
-
-            match = np.all(self.keys[e['key_idx']] == key[:self.kd])
+            # Check if the cell has a matching key
+            match = np.all(self.keys[idx] == key[:self.kd])
             if match:
-                return e['value_idx']
+                return self.indices[h]
             # increment the bucket with warparound
             h += 1
             if h == self.capacity:
@@ -100,19 +104,17 @@ class HashTablePermutohedral(object):
         The index of the first object in k, when k is completely matched
         """
         h = self._hash(k) % self.capacity
-        offset = self.lookup_offset(k, h, create)
-        if offset < 0:
+        idx = self.lookup_idx(k, h, create)
+        if idx < 0:
             return None
         else: 
-            return offset
+            return idx
 
     def _hash(self, key):
         k = np.array([0], dtype=np.int64)
         for i in range(self.kd):
             k += key[i]
             k *= 2531011
-        # # 2021.08.26 Numpify, Aborted because of overflow
-        # k = np.sum(key * 2531011 ** (np.arange(self.kd)[::-1] + 1))
         return k[0]
 
     def _grow(self):
@@ -120,37 +122,27 @@ class HashTablePermutohedral(object):
         old_capacity = self.capacity
         self.capacity *= 2
         # Migrate the value vectors.
-        # new_values = np.zeros((self.vd * self.capacity // 2), dtype='float32')
-        # new_values[:self.vd * old_capacity // 2] = self.values
         new_values = np.zeros((self.capacity // 2, self.vd), dtype='float32')
         new_values[:old_capacity // 2] = self.values
         self.values = new_values
 
         # Migrate the key vectors.
-        # new_keys = np.zeros((self.kd * self.capacity // 2), dtype='int16')
-        # new_keys[:self.kd * old_capacity // 2] = self.keys
         new_keys = np.zeros((self.capacity // 2, self.kd), dtype='int16')
         new_keys[:old_capacity // 2] = self.keys
         self.keys = new_keys
 
         # Migrate the table of indices.
-        new_entries = [{'key_idx': -1, 'value_idx': -1} for _ in range(self.capacity)]
+        new_indices = np.ones((self.capacity, ), dtype='int64') * -1
         for i in range(old_capacity):
-            if self.entries[i]['key_idx'] == -1:
+            if self.indices[i] == -1:
                 continue
-            # h = self._hash(
-            #     self.keys[self.entries[i]['key_idx']:self.entries[i]['key_idx'] + self.kd]
-            # ) % self.capacity
-            h = self._hash(
-                self.keys[self.entries[i]['key_idx']]
-            ) % self.capacity
-            while new_entries[h]['key_idx'] != -1:
+            h = self._hash(self.keys[self.indices[i]]) % self.capacity
+            while new_indices[h] != -1:
                 h += 1
                 if h == self.capacity:
                     h = 0
-                
-            new_entries[h] = self.entries[i]
-        self.entries = new_entries
+            new_indices[h] = self.indices[i]
+        self.indices = new_indices
 
 
 class PermutohedralLattice(object):
@@ -184,7 +176,7 @@ class PermutohedralLattice(object):
         self.greedy = np.zeros(self.d1, dtype='int16')
         self.rank = np.zeros(self.d1, dtype='int16')
         self.barycentric = np.zeros((d + 2), dtype='float32')
-        self.replay = [{'offset': 0, 'weight': 0.} for _ in range(inp_len * self.d1)]
+        self.replay = [{'index': 0, 'weight': 0.} for _ in range(inp_len * self.d1)]
         self.nReplay = 0
         self.canonical = np.zeros((self.d1 ** 2), dtype='int16')
         self.key = np.zeros(self.d1, dtype='int16')
@@ -328,6 +320,8 @@ class PermutohedralLattice(object):
         self.rank *= 0
         # rank differential to find the permutation between this simplex and the canonical one.
         # (See pg. 3-4 in paper.)
+        # Libin: sort el_minus_gr in a descending order!!!
+        # Libin: try using tf.argsort
         el_minus_gr = self.elevated - self.greedy
         for i in range(self.d):
             for j in range(i + 1, self.d1):
@@ -335,6 +329,10 @@ class PermutohedralLattice(object):
                     self.rank[i] += 1
                 else:
                     self.rank[j] += 1
+
+        # Libin:
+        # self.rank = self.d - np.argsort(el_minus_gr, kind='heapsort')
+        # print(self.rank, rank, self.rank == rank)
 
         if sum > 0:
             # sum too large - the point is off the hyperplane.
@@ -373,10 +371,10 @@ class PermutohedralLattice(object):
             # Accumulate values with barycentric weight.
             # tmp = self.hash_table.values[hash_idx:hash_idx + self.vd] + self.barycentric[remainder] * value[
             # :self.vd]
-            self.hash_table.values[hash_idx:hash_idx + self.vd] += self.barycentric[remainder] * value[:self.vd]
+            self.hash_table.values[hash_idx] += self.barycentric[remainder] * value[:self.vd]
 
             # Record this interaction to use later when slicing
-            self.replay[self.nReplay]['offset'] = hash_idx
+            self.replay[self.nReplay]['index'] = hash_idx
             self.replay[self.nReplay]['weight'] = self.barycentric[remainder]
             self.nReplay += 1
 
@@ -396,8 +394,7 @@ class PermutohedralLattice(object):
         for i in range(self.d1):
             r = self.replay[self.nReplay]
             self.nReplay += 1
-            for j in range(self.vd):
-                col[j] += r['weight'] * base[r['offset'] + j]
+            col[:self.vd] += r['weight'] * base[r['index']]
 
     def blur(self, reverse=False):
         """
@@ -415,7 +412,8 @@ class PermutohedralLattice(object):
         old_vals_idx = 0
         hash_table_base_idx = 0
         key = self.hash_table.get_keys()
-        new_vals = np.zeros((self.vd * self.hash_table.size()), dtype='float64')
+        # new_vals = np.zeros((self.vd * self.hash_table.size()), dtype='float64')
+        new_vals = np.zeros((self.hash_table.size(), self.vd), dtype='float64')
         old_vals = np.copy(self.hash_table.values)
 
         # For each of d+1 axes, reverse takes care of the gradient computation during the backward pass
@@ -424,14 +422,14 @@ class PermutohedralLattice(object):
             # log.info(j)
             # For each vertex in the lattice
             for i in range(self.hash_table.size()): # blur point i in dimension j
-                neighbour1[:self.d] = key[i * self.d:(i + 1) * self.d] + 1
-                neighbour2[:self.d] = key[i * self.d:(i + 1) * self.d] - 1
+                neighbour1[:self.d] = key[i] + 1
+                neighbour2[:self.d] = key[i] - 1
 
-                neighbour1[j] = key[j + i * self.d] - self.d
-                neighbour2[j] = key[j + i * self.d] + self.d # keys to the neighbors along the given axis.
+                neighbour1[j] = key[i, j] - self.d
+                neighbour2[j] = key[i, j] + self.d # keys to the neighbors along the given axis.
 
-                old_val_offset = old_vals_idx + i * self.vd
-                new_val_offset = new_vals_idx + i * self.vd
+                old_val_offset = old_vals_idx + i
+                new_val_offset = new_vals_idx + i
 
                 vm1_idx = self.hash_table.lookup(neighbour1, False) # look up first neighbor
                 if vm1_idx is not None:
@@ -449,26 +447,22 @@ class PermutohedralLattice(object):
                 if vm1_idx is None:
                     vm1_val = 0
                 else:
-                    vm1_val = old_vals[vm1_idx:vm1_idx + self.vd]
+                    vm1_val = old_vals[vm1_idx]
 
                 if vp1_idx is None:
                     vp1_val = 0
                 else:
-                    vp1_val = old_vals[vp1_idx:vp1_idx + self.vd]
+                    vp1_val = old_vals[vp1_idx]
 
                 # applies the convolution with a 1d kernel [1, 2, 1]
                 # self.hash_table.values[new_val_offset:new_val_offset + self.vd] = \
-                new_vals[new_val_offset:new_val_offset + self.vd] = \
+                new_vals[new_val_offset] = \
                     .25 * (vm1_val + vp1_val) + \
-                        .5 * old_vals[old_val_offset:old_val_offset + self.vd]
+                        .5 * old_vals[old_val_offset]
 
-            tmp = new_vals_idx
-            new_vals_idx = old_vals_idx
-            old_vals_idx = tmp
+            new_vals_idx, old_vals_idx = old_vals_idx, new_vals_idx
 
-            tmp = new_vals
-            new_vals = old_vals
-            old_vals = tmp
+            new_vals, old_vals = old_vals, new_vals
             # the freshest data is now in oldValue, and newValue is ready to be written over
 
         self.hash_table.values = old_vals

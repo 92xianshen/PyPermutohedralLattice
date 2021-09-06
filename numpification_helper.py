@@ -37,10 +37,10 @@ pos_idx = 0
 #     scale_factor[i] = expected_std / np.sqrt((i + 1) * (i + 2))
 # print(scale_factor)
 
-scale_factor = np.zeros((d, ), dtype='float32')
-expected_std = d1 * np.sqrt(2 / 3.)
-scale_factor[:] = expected_std / np.sqrt((np.arange(d) + 1) * (np.arange(d) + 2))
-print(scale_factor)
+# scale_factor = np.zeros((d, ), dtype='float32')
+# expected_std = d1 * np.sqrt(2 / 3.)
+# scale_factor[:] = expected_std / np.sqrt((np.arange(d) + 1) * (np.arange(d) + 2))
+# print(scale_factor)
 
 # # # ->> 3. PermutohedralLattice.splat.elevated
 # # # first rotate position into the (d+1)-dimensional hyperplane
@@ -62,14 +62,27 @@ print(scale_factor)
 
 # ->> 4. PermutohedralLattice.splat.barycentric
 # reset barycentric
-barycentric *= 0
-t = (elevated - greedy) * splat_scale
-# Compute barycentric coordinates (See pg.10 of paper.)
-for i in range(d1):
-    barycentric[d - rank[i]] += t[i]
-    barycentric[d1 - rank[i]] -= t[i]
+# barycentric *= 0
+# t = (elevated - greedy) * splat_scale
+# # Compute barycentric coordinates (See pg.10 of paper.)
+# for i in range(d1):
+#     barycentric[d - rank[i]] += t[i]
+#     barycentric[d1 - rank[i]] -= t[i]
 
-barycentric[0] += 1. + barycentric[d1]
+# barycentric[0] += 1. + barycentric[d1]
 
-barycentric[d - rank[np.arange(d1)]] += t[np.arange[d1]]
-barycentric[d]
+# barycentric[d - rank[np.arange(d1)]] += t[np.arange[d1]]
+# barycentric[d]
+
+# ->> 5. PermutohedralLattice.splat.el_minus_gr
+el_minus_gr = [1, 3, 3, 5, 4]
+rank = [0, 0, 0, 0, 0]
+for i in range(4):
+    for j in range(i + 1, 5):
+        if el_minus_gr[i] < el_minus_gr[j]:
+            rank[i] += 1
+        else:
+            rank[j] += 1
+print(rank)
+# print(np.argsort(el_minus_gr))
+print(4 - np.argsort(el_minus_gr, kind='quicksort'))

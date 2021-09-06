@@ -1,7 +1,7 @@
 from builtins import range
 import numpy as np
 from skimage.io import imread
-from permutohedral_lattice import PermutohedralLattice
+from py_impl import PermutohedralLattice
 import logging
 # from skimage.transform import resize
 import sys
