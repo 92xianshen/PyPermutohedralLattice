@@ -1,6 +1,7 @@
 import numpy as np
 from PIL import Image
-from permutohedral import Permutohedral
+# from permutohedral_numpified import Permutohedral
+from tf_impl import Permutohedral
 import matplotlib.pyplot as plt
 import cv2
 
@@ -12,42 +13,43 @@ h, w, n_channels = im.shape
 invSpatialStdev = 1. / 5.
 invColorStdev = 1. / .25
 
-features = np.zeros((5, h, w), dtype=np.float32)
-for r in range(h):
-    for c in range(w):
-        features[0, r, c] = invSpatialStdev * c
-        features[1, r, c] = invSpatialStdev * r
-        features[2, r, c] = invColorStdev * im[r, c, 0]
-        features[3, r, c] = invColorStdev * im[r, c, 1]
-        features[4, r, c] = invColorStdev * im[r, c, 2]
-features = features.reshape((5, -1))
-# features = np.zeros((2, h, w), dtype=np.float32)
-# for r in range(h):
-#     for c in range(w):
-#         features[0, r, c] = invSpatialStdev * c
-#         features[1, r, c] = invSpatialStdev * r
-# features = features.reshape((2, -1))
+features = np.zeros((h, w, 5), dtype=np.float32)
+spatial_feat = np.mgrid[0:h, 0:w][::-1].transpose((1, 2, 0)) * invSpatialStdev
+color_feat = im * invColorStdev
+features[..., :2] = spatial_feat
+features[..., 2:] = color_feat
+features = features.reshape((-1, 5))
 
-N, d = features.shape[1], features.shape[0]
+N, d = features.shape[0], features.shape[1]
 lattice = Permutohedral(N, d)
 lattice.init(features)
 
-all_ones = np.ones((1, N), dtype=np.float32)
+all_ones = np.ones((N, 1), dtype=np.float32)
 all_ones = lattice.compute(all_ones)
-all_ones = all_ones.reshape((1, h, w))[0]
+all_ones = all_ones.reshape((h, w, 1))
 
-im_filtered = np.zeros_like(im)
-for ch in range(n_channels):
-    imch = im[..., ch:ch + 1].transpose((2, 0, 1)).reshape((1, -1))
-    imch_filtered = lattice.compute(imch)
-    imch_filtered = imch_filtered.reshape((1, h, w))[0]
-    imch_filtered = imch_filtered / all_ones
-    imch_filtered = (imch_filtered - imch_filtered.min()) / (imch_filtered.max() - imch_filtered.min())
-    im_filtered[..., ch] = imch_filtered
+src = im.reshape((-1, n_channels))
+dst = lattice.compute(src).numpy()
+dst = dst.reshape((h, w, n_channels))
+dst = dst / all_ones
+dst = (dst - dst.min()) / (dst.max() - dst.min() + 1e-5)
 
 cv2.imshow('im', im[..., ::-1])
-cv2.imshow('im_filtered', im_filtered[..., ::-1])
+cv2.imshow('im_filtered', dst[..., ::-1])
 cv2.waitKey()
+
+# im_filtered = np.zeros_like(im)
+# for ch in range(n_channels):
+#     imch = im[..., ch:ch + 1].transpose((2, 0, 1)).reshape((1, -1))
+#     imch_filtered = lattice.compute(imch)
+#     imch_filtered = imch_filtered.reshape((1, h, w))[0]
+#     imch_filtered = imch_filtered / all_ones
+#     imch_filtered = (imch_filtered - imch_filtered.min()) / (imch_filtered.max() - imch_filtered.min())
+#     im_filtered[..., ch] = imch_filtered
+
+# cv2.imshow('im', im[..., ::-1])
+# cv2.imshow('im_filtered', im_filtered[..., ::-1])
+# cv2.waitKey()
 
 # im_add = im.transpose((2, 0, 1)).reshape((n_channels, -1))
 # im_add = np.vstack([im_add, np.ones((1, h * w), dtype=im.dtype)])
