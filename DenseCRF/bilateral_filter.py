@@ -23,6 +23,7 @@ features = features.reshape((-1, 5))
 N, d = features.shape[0], features.shape[1]
 lattice = Permutohedral(N, d)
 lattice.init(features)
+print('Lattice initialized.')
 
 all_ones = np.ones((N, 1), dtype=np.float32)
 all_ones = lattice.compute(all_ones)
