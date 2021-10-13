@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image
-# from permutohedral_numpified import Permutohedral
-from tf_impl import Permutohedral
+from permutohedral_numpified import Permutohedral
+# from tf_impl import Permutohedral
 import matplotlib.pyplot as plt
 import cv2
 
@@ -30,7 +30,7 @@ all_ones = lattice.compute(all_ones)
 all_ones = all_ones.reshape((h, w, 1))
 
 src = im.reshape((-1, n_channels))
-dst = lattice.compute(src).numpy()
+dst = lattice.compute(src)
 dst = dst.reshape((h, w, n_channels))
 dst = dst / all_ones
 dst = (dst - dst.min()) / (dst.max() - dst.min() + 1e-5)
